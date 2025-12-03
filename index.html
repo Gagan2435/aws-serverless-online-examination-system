@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Serverless Online Exam — Frontend</title>
+  <style>
+    :root{--bg:#f6f9fc;--card:#ffffff;--accent:#2563eb;--muted:#6b7280;--glass:rgba(37,99,235,0.06)}
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,Arial; margin:0; background:var(--bg); color:#0f1724}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .card{background:var(--card);border-radius:12px;padding:24px;box-shadow:0 10px 30px rgba(15,23,36,0.06);width:100%;max-width:920px}
+    .center{display:flex;align-items:center;justify-content:center}
+    h1{margin:0;font-size:20px;text-align:center}
+    .muted{color:var(--muted);font-size:14px}
+    .btn{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+    .secondary{background:transparent;color:var(--accent);border:1px solid rgba(37,99,235,0.14);padding:8px 12px;border-radius:10px}
+    .grid{display:grid;grid-template-columns:1fr 300px;gap:18px;margin-top:18px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
+    .question-box{padding:16px;border-radius:10px}
+    .q-head{display:flex;justify-content:space-between;align-items:center}
+    .q-text{font-size:18px;margin:12px 0}
+    .options{display:flex;flex-direction:column;gap:10px}
+    .opt{background:var(--glass);border-radius:8px;padding:12px;cursor:pointer;border:1px solid transparent}
+    .opt.selected{border-color:var(--accent);box-shadow:0 6px 12px rgba(37,99,235,0.06)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .palette{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;justify-content:center}
+    .pal-item{width:34px;height:34px;border-radius:6px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted)}
+    .hidden{display:none}
+    .loader{border:4px solid #f3f3f3;border-top:4px solid var(--accent);border-radius:50%;width:28px;height:28px;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .error{background:#fff6f6;border:1px solid #fcc; padding:10px;border-radius:8px;color:#802020}
+    .info{background:#eef6ff;border:1px solid #cfe4ff;padding:10px;border-radius:8px;color:#0b3a66}
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="center" style="flex-direction:column;gap:12px">
+        <div style="width:64px;height:64px;border-radius:12px;background:linear-gradient(180deg,#60a5fa,#2563eb);display:flex;align-items:center;justify-content:center;font-weight:700;color:white">EX</div>
+        <h1>Serverless Online Exam</h1>
+      </div>
+
+      <!-- START PAGE -->
+      <section id="startPage" style="margin-top:18px;text-align:center">
+        <div style="display:inline-block;text-align:center">
+          <h2 style="margin:6px 0">AWS Fundamentals</h2>
+          <p class="muted" style="margin:6px 0">Duration: 5 minutes</p>
+          <div style="margin-top:12px;display:flex;gap:10px;justify-content:center">
+            <button class="btn" id="startBtnMain">Start Exam</button>
+          </div>
+          <div id="startMsg" style="margin-top:12px"></div>
+        </div>
+      </section>
+
+      <!-- EXAM PAGE -->
+      <section id="examPage" class="hidden" style="margin-top:18px">
+        <div class="grid">
+          <main>
+            <div class="question-box">
+              <div class="q-head">
+                <div>
+                  <div class="muted" id="examTitle">AWS Fundamentals</div>
+                  <div class="muted">Question <span id="qIndex">1</span> of <span id="qTotal">--</span></div>
+                </div>
+                <div class="muted">Student: <span id="studentName">Guest</span></div>
+              </div>
+
+              <div id="statusArea" style="margin-top:12px"></div>
+
+              <div class="q-text" id="qText">Loading question...</div>
+              <div class="options" id="qOptions"></div>
+
+              <div class="controls">
+                <button class="secondary" id="prevBtn">Previous</button>
+                <button class="secondary" id="nextBtn">Next</button>
+                <div style="flex:1"></div>
+                <button class="secondary" id="markBtn">Mark</button>
+                <button class="btn" id="submitBtn">Submit</button>
+              </div>
+            </div>
+
+            <div style="margin-top:14px" id="resultBox"></div>
+          </main>
+
+          <aside>
+            <div style="display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;height:100%">
+              <div>
+                <div class="muted">Progress</div>
+                <div id="progressText">0 answered</div>
+              </div>
+              <div>
+                <div class="muted">Marked for review</div>
+                <div id="markedCount">0</div>
+              </div>
+              <div style="width:100%">
+                <div class="muted" style="text-align:center">Question Palette</div>
+                <div class="palette" id="palette"></div>
+              </div>
+              <div>
+                <button class="secondary" id="endExam">End Exam</button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+   const API_BASE = 'YOUR_API_BASE_URL_HERE';
+
+
+    let exam = { id: 'exam-abc-123', title: 'AWS Fundamentals', duration: 5 };
+    let questions = [];
+    let current = 0;
+    let selections = {};
+    let marked = new Set();
+
+    // DOM
+    const startPage = document.getElementById('startPage');
+    const examPage = document.getElementById('examPage');
+    const qText = document.getElementById('qText');
+    const qOptions = document.getElementById('qOptions');
+    const qIndex = document.getElementById('qIndex');
+    const qTotal = document.getElementById('qTotal');
+    const progressText = document.getElementById('progressText');
+    const palette = document.getElementById('palette');
+    const markedCount = document.getElementById('markedCount');
+    const resultBox = document.getElementById('resultBox');
+    const statusArea = document.getElementById('statusArea');
+    const startMsg = document.getElementById('startMsg');
+
+    function showStart(msg){ startPage.classList.remove('hidden'); examPage.classList.add('hidden'); startMsg.innerHTML = msg ? `<div class="info">${msg}</div>` : ''; }
+    function showExam(){ startPage.classList.add('hidden'); examPage.classList.remove('hidden'); }
+
+    function setStatusLoading(text='Loading…'){
+      statusArea.innerHTML = `<div style="display:flex;gap:10px;align-items:center"><div class="loader"></div><div class="muted">${text}</div></div>`;
+    }
+    function setStatusError(msg){ statusArea.innerHTML = `<div class="error">${msg}</div>`; }
+    function clearStatus(){ statusArea.innerHTML = ''; }
+
+    // Fetch with robust error handling and UI feedback
+    async function fetchQuestionsFromAPI(examId){
+      setStatusLoading('Fetching questions from API');
+      console.log('Fetching:', `${API_BASE}/exams/${examId}/questions`);
+      try{
+        const res = await fetch(`${API_BASE}/exams/${examId}/questions`, { method: 'GET' });
+        console.log('Fetch response', res.status, res.statusText);
+
+        // Show headers for debugging (CORS)
+        const corsOrigin = res.headers.get('Access-Control-Allow-Origin') || res.headers.get('access-control-allow-origin');
+        console.log('CORS header (response):', corsOrigin);
+
+        if (!res.ok) {
+          const text = await res.text();
+          setStatusError(`API error: ${res.status} ${res.statusText} — ${text}`);
+          throw new Error('API responded with non-OK status');
+        }
+
+        const data = await res.json();
+        clearStatus();
+        return data.questions || [];
+      } catch (err) {
+        console.error('fetchQuestionsFromAPI error:', err);
+        setStatusError('Failed to fetch questions. Check console and CORS settings.');
+        // helpful debug block: attempt to fetch OPTIONS preflight info via curl-style fetch (will still be blocked if CORS is wrong)
+        try{
+          const opt = await fetch(`${API_BASE}/exams/${examId}/questions`, { method: 'OPTIONS' });
+          console.log('OPTIONS response', opt.status, [...opt.headers]);
+        }catch(e){ console.log('OPTIONS failed (normal if CORS blocked):', e); }
+
+        return [];
+      }
+    }
+
+    async function submitExamToAPI(examId,payload){
+      setStatusLoading('Submitting answers...');
+      try{
+        const res = await fetch(`${API_BASE}/exams/${examId}/submit`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        if(!res.ok){ const txt = await res.text(); setStatusError(`Submit failed: ${res.status} ${txt}`); return null; }
+        const data = await res.json(); clearStatus(); return data;
+      }catch(err){ console.error('submit error',err); setStatusError('Submit request failed — check console'); return null; }
+    }
+
+    async function beginExam(){
+      startMsg.innerHTML = '';
+      questions = await fetchQuestionsFromAPI(exam.id);
+      if(!questions || questions.length===0){ showStart('<strong>Unable to load questions.</strong> Check CORS or API.'); return; }
+      qTotal.textContent = questions.length;
+      renderQuestion(0);
+      buildPalette();
+      showExam();
+    }
+
+    // ---------- RENDER QUESTION (supports MCQ and short-answer) ----------
+    function renderQuestion(i){
+      current = i;
+      const q = questions[i];
+      qIndex.textContent = i+1;
+      qText.textContent = q.text || '(no text)';
+      qOptions.innerHTML = '';
+
+      // If question is a short-answer type, show a textarea
+      if (q.type === 'short') {
+        const ta = document.createElement('textarea');
+        ta.style.width = '100%';
+        ta.style.minHeight = '80px';
+        ta.style.borderRadius = '8px';
+        ta.style.padding = '10px';
+        ta.style.fontFamily = 'inherit';
+        ta.style.fontSize = '14px';
+        ta.placeholder = 'Type your short answer here...';
+        // prefill if already answered (we store text directly in selections[q.qId])
+        if (selections[q.qId] && typeof selections[q.qId] === 'string') ta.value = selections[q.qId];
+        ta.oninput = (e) => {
+          const val = e.target.value;
+          // store text answers as string
+          if (val === '') delete selections[q.qId];
+          else selections[q.qId] = val;
+          updateProgress();
+        };
+        qOptions.appendChild(ta);
+        updateProgress();
+        return;
+      }
+
+      // Otherwise render multiple-choice options (existing behavior)
+      (q.options||[]).forEach((opt, idx)=>{
+        const div = document.createElement('div');
+        // mark selection for MCQ only if stored value is a number matching idx
+        const isSelected = (typeof selections[q.qId] === 'number' && selections[q.qId] === idx);
+        div.className = 'opt'+(isSelected ? ' selected' : '');
+        div.textContent = opt;
+        div.onclick = ()=>{ selections[q.qId]=idx; renderQuestion(current); updateProgress(); };
+        qOptions.appendChild(div);
+      });
+      updateProgress();
+    }
+
+    // ---------- UPDATE PROGRESS (counts MCQ selections and non-empty short answers) ----------
+    function updateProgress(){
+      // count answered: an entry exists in selections (either number index or non-empty string)
+      const answeredCount = Object.keys(selections).filter(k => {
+        const v = selections[k];
+        return v !== undefined && v !== null && !(typeof v === 'string' && v.trim() === '');
+      }).length;
+
+      progressText.textContent = answeredCount + ' answered';
+      markedCount.textContent = marked.size;
+      palette.innerHTML = '';
+      questions.forEach((q, idx)=>{
+        const el = document.createElement('div');
+        el.className = 'pal-item';
+        el.textContent = idx+1;
+        // visual: if answered (number or non-empty string), show gradient
+        const ans = selections[q.qId];
+        if (ans !== undefined && ans !== null && !(typeof ans === 'string' && ans.trim() === '')) el.style.background = 'linear-gradient(180deg,#bbdffd,#60a5fa)';
+        if (marked.has(q.qId)) el.style.border = '2px dashed #f97316';
+        el.onclick = ()=>{ renderQuestion(idx); };
+        palette.appendChild(el);
+      });
+    }
+
+    document.getElementById('startBtnMain').addEventListener('click', beginExam);
+    document.getElementById('nextBtn').addEventListener('click', ()=>{ if(current < questions.length-1) renderQuestion(current+1); });
+    document.getElementById('prevBtn').addEventListener('click', ()=>{ if(current > 0) renderQuestion(current-1); });
+    document.getElementById('markBtn').addEventListener('click', ()=>{ const qid = questions[current].qId; if(marked.has(qid)) marked.delete(qid); else marked.add(qid); updateProgress(); });
+    document.getElementById('endExam').addEventListener('click', showStart);
+
+    document.getElementById('submitBtn').addEventListener('click', async ()=>{
+      if(!confirm('Submit answers?')) return;
+      // build payload supporting both MCQ (answerIndex) and short text (answerText)
+      const payload = {
+        userName: 'student1',
+        answers: Object.entries(selections).map(([qId, ans]) => {
+          // if answer is a string -> short text answer; if number -> option index
+          if (typeof ans === 'string') return { qId, type: 'short', answerText: ans };
+          return { qId, type: 'mcq', answerIndex: ans };
+        })
+      };
+      const res = await submitExamToAPI(exam.id, payload);
+      if(res) showResult(res);
+    });
+
+    function buildPalette(){
+      palette.innerHTML = '';
+      questions.forEach((q, idx)=>{
+        const el = document.createElement('div');
+        el.className = 'pal-item';
+        el.textContent = idx+1;
+        el.onclick = ()=>{ renderQuestion(idx); };
+        palette.appendChild(el);
+      });
+    }
+
+    function showResult(res){
+      resultBox.innerHTML = `<div style=\"padding:12px;border-radius:8px;background:#fff;margin-top:12px;box-shadow:0 6px 18px rgba(15,23,36,0.04)\"><h3 style=\"margin:0 0 8px 0\">Result</h3><p style=\"margin:0\">Score: <strong>${res.score}</strong> / ${res.total || '—'}</p><pre style=\"margin-top:8px;white-space:pre-wrap;\">${JSON.stringify(res,null,2)}</pre></div>`;
+    }
+
+    // initial small preview
+    (function(){ qTotal.textContent = '--'; showStart(); })();
+  </script>
+</body>
+</html>
